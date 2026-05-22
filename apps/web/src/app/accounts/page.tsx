@@ -64,6 +64,8 @@ export default function AccountsPage() {
   const [createError, setCreateError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [justCreated, setJustCreated] = useState<{ liffId: string | null } | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -130,6 +132,31 @@ export default function AccountsPage() {
     load()
   }
 
+  const handleImport = async () => {
+    if (!confirm('LINE 公式アカウントの既存フォロワーを D1 にインポートしますか？')) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const res = await api.friends.importFromLine()
+      if (!res.success) {
+        setImportResult({ success: false, message: (res as { error?: string }).error || 'インポートに失敗しました' })
+      } else if (!res.data) {
+        setImportResult({ success: false, message: 'インポートに失敗しました' })
+      } else {
+        const lines = res.data.map(r => {
+          if (r.error) return `  ${r.accountName}: ${r.error}`
+          return `  ${r.accountName}: ${r.total} 人中 ${r.imported} 人インポート`
+        })
+        setImportResult({ success: true, message: `インポート完了:\n${lines.join('\n')}` })
+      }
+    } catch {
+      setImportResult({ success: false, message: 'API エラーが発生しました' })
+    } finally {
+      setImporting(false)
+      load()
+    }
+  }
+
   return (
     <div>
       <Header
@@ -137,6 +164,13 @@ export default function AccountsPage() {
         description="マルチアカウント設定"
         action={
           <div className="flex gap-2">
+            <button
+              onClick={handleImport}
+              disabled={importing}
+              className="px-3 py-2 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+            >
+              {importing ? 'インポート中...' : 'LINEフォロワーをインポート'}
+            </button>
             <button
               onClick={() => setShowReorder(true)}
               className="px-3 py-2 rounded-lg text-xs font-medium border border-gray-300 hover:bg-gray-50"
@@ -164,6 +198,12 @@ export default function AccountsPage() {
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
+        </div>
+      )}
+
+      {importResult && (
+        <div className={`mb-6 p-4 rounded-lg text-sm whitespace-pre-wrap ${importResult.success ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {importResult.message}
         </div>
       )}
 

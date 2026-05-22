@@ -82,8 +82,15 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
       ...options?.headers,
     },
   })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
   if (res.status === 204) return undefined as T
+  if (!res.ok) {
+    try {
+      const body = await res.json() as T
+      return body
+    } catch {
+      throw new Error(`API error: ${res.status}`)
+    }
+  }
   return res.json() as Promise<T>
 }
 
@@ -153,6 +160,11 @@ export const api = {
     richMenu: (id: string) =>
       fetchApi<ApiResponse<{ id: string | null; name: string | null; isDefault: boolean }>>(
         `/api/friends/${id}/rich-menu`,
+      ),
+    importFromLine: () =>
+      fetchApi<ApiResponse<Array<{ accountId: string; accountName: string; total?: number; imported?: number; error?: string }>>>(
+        '/api/friends/import-from-line',
+        { method: 'POST' },
       ),
   },
   tags: {

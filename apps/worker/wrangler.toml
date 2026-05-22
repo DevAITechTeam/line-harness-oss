@@ -4,10 +4,11 @@ compatibility_date = "2024-12-01"
 workers_dev = true
 
 # ═══════════════════════════════════════════════════════════════
-# デフォルト = テスト環境 (noda@)
-# 使い方: npx wrangler deploy
+# 本番環境（content-engine 連携・Account: Zexel8716@gmail.com's Account）
+# 使い方: npx wrangler deploy / npx wrangler secret put <NAME>
+# 環境は単一（トップレベルのみ）。
 # ═══════════════════════════════════════════════════════════════
-account_id = "YOUR_DEV_ACCOUNT_ID"
+account_id = "67e479ff74720ebc9d43d86d7ebbd9dd"
 
 [assets]
 directory = "dist/client"
@@ -16,35 +17,11 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "line-harness"
-database_id = "YOUR_DEV_D1_DATABASE_ID"
+database_id = "e5694f03-e447-4427-ac99-080f4c43b95f"
 
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "line-harness-images"
 
 [triggers]
-crons = ["*/5 * * * *", "0 */6 * * *"]
-
-# ═══════════════════════════════════════════════════════════════
-# 本番環境 (aiagent.mini@)
-# 使い方: npx wrangler deploy --env production --name your-worker-name
-# D1:     npx wrangler d1 execute line-crm --env production --remote --file ...
-# ═══════════════════════════════════════════════════════════════
-[env.production]
-account_id = "YOUR_ACCOUNT_ID"
-
-[env.production.assets]
-directory = "dist/client"
-binding = "ASSETS"
-
-[[env.production.d1_databases]]
-binding = "DB"
-database_name = "line-crm"
-database_id = "YOUR_D1_DATABASE_ID"
-
-[[env.production.r2_buckets]]
-binding = "IMAGES"
-bucket_name = "line-harness-images"
-
-[env.production.triggers]
 crons = ["*/5 * * * *", "0 */6 * * *"]

@@ -17,6 +17,7 @@ export interface AutoReplyDraft {
 interface Props {
   draft: AutoReplyDraft
   templates: Array<{ id: string; name: string; messageType: string; messageContent: string }>
+  accounts: Array<{ id: string; name: string; displayName?: string }>
   onClose: () => void
   onSaved: () => void
 }
@@ -31,12 +32,13 @@ function detectMode(d: AutoReplyDraft): ResponseMode {
   return 'inline-text'
 }
 
-export default function EditDialog({ draft, templates, onClose, onSaved }: Props) {
+export default function EditDialog({ draft, templates, accounts, onClose, onSaved }: Props) {
   const [keyword, setKeyword] = useState(draft.keyword)
   const [matchType, setMatchType] = useState<'exact' | 'contains'>(draft.matchType)
   const [mode, setMode] = useState<ResponseMode>(detectMode(draft))
   const [templateId, setTemplateId] = useState<string | null>(draft.templateId)
   const [responseContent, setResponseContent] = useState(draft.responseContent)
+  const [lineAccountId, setLineAccountId] = useState<string | null>(draft.lineAccountId)
   const [isActive, setIsActive] = useState(draft.isActive)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -75,7 +77,7 @@ export default function EditDialog({ draft, templates, onClose, onSaved }: Props
         // 削除された (ON DELETE SET NULL) ときの inline fallback として機能する。
         responseContent: mode === 'silent' ? '' : responseContent,
         templateId: mode === 'template' ? templateId : null,
-        lineAccountId: draft.lineAccountId,
+        lineAccountId,
         isActive,
       }
       if (mode === 'template' && templateId) {
@@ -213,6 +215,21 @@ export default function EditDialog({ draft, templates, onClose, onSaved }: Props
             />
             <span className="text-xs text-gray-600">有効</span>
           </label>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">適用アカウント</label>
+            <select
+              value={lineAccountId ?? ''}
+              onChange={(e) => setLineAccountId(e.target.value || null)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <option value="">全体（全アカウントに適用）</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.displayName ?? a.name}
+                </option>
+              ))}
+            </select>
+          </div>
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
         <div className="px-5 py-3 border-t flex gap-2 justify-end">

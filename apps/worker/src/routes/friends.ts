@@ -3,6 +3,8 @@ import {
   getFriends,
   getFriendById,
   getFriendCount,
+  getLineAccounts,
+  upsertFriend,
   addTagToFriend,
   removeTagFromFriend,
   getFriendTags,
@@ -590,6 +592,127 @@ friends.post('/api/friends/:id/messages', async (c) => {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error('POST /api/friends/:id/messages error:', errMsg);
     return c.json({ success: false, error: errMsg }, 500);
+  }
+});
+
+// POST /api/friends/import-from-line — import existing LINE followers into D1
+friends.post('/api/friends/import-from-line', async (c) => {
+  try {
+    const db = c.env.DB;
+    const allAccounts = await getLineAccounts(db);
+    const activeAccounts = allAccounts.filter(a => a.is_active);
+
+    if (activeAccounts.length === 0) {
+      return c.json({ success: false, error: '有効なLINEアカウントがありません' }, 400);
+    }
+
+    const results: Array<{
+      accountId: string;
+      accountName: string;
+      total?: number;
+      imported?: number;
+      error?: string;
+    }> = [];
+
+    for (const account of activeAccounts) {
+      const allUserIds: string[] = [];
+      let cursor: string | undefined;
+
+      try {
+        do {
+          const params = new URLSearchParams({ limit: '1000' });
+          if (cursor) params.set('start', cursor);
+
+          const res = await fetch(
+            `https://api.line.me/v2/bot/followers/ids?${params}`,
+            { headers: { Authorization: `Bearer ${account.channel_access_token}` } },
+          );
+
+          if (!res.ok) {
+            const errBody = await res.text();
+            results.push({
+              accountId: account.id,
+              accountName: account.name,
+              error: `LINE API ${res.status}: ${errBody}`,
+            });
+            break;
+          }
+
+          const data = await res.json() as { userIds: string[]; next?: string };
+          allUserIds.push(...data.userIds);
+          cursor = data.next;
+        } while (cursor);
+      } catch (err) {
+        results.push({
+          accountId: account.id,
+          accountName: account.name,
+          error: `取得失敗: ${err instanceof Error ? err.message : String(err)}`,
+        });
+        continue;
+      }
+
+      if (allUserIds.length === 0) {
+        results.push({
+          accountId: account.id,
+          accountName: account.name,
+          total: 0,
+          imported: 0,
+        });
+        continue;
+      }
+
+      // Pre-fetch active friend_add scenarios for this account
+      const allScenarios = await getScenarios(db);
+      const accountScenarios = allScenarios.filter(
+        s => s.trigger_type === 'friend_add' && s.is_active &&
+          (!s.line_account_id || s.line_account_id === account.id),
+      );
+
+      let imported = 0;
+      for (const userId of allUserIds) {
+        let profile: { displayName?: string; pictureUrl?: string; statusMessage?: string } | undefined;
+        try {
+          const profileRes = await fetch(
+            `https://api.line.me/v2/bot/profile/${userId}`,
+            { headers: { Authorization: `Bearer ${account.channel_access_token}` } },
+          );
+          if (profileRes.ok) profile = await profileRes.json();
+        } catch { /* profile fetch failure is non-fatal */ }
+
+        const friend = await upsertFriend(db, {
+          lineUserId: userId,
+          displayName: profile?.displayName ?? null,
+          pictureUrl: profile?.pictureUrl ?? null,
+          statusMessage: profile?.statusMessage ?? null,
+        });
+
+        await db
+          .prepare('UPDATE friends SET line_account_id = ?, updated_at = ? WHERE id = ?')
+          .bind(account.id, jstNow(), friend.id)
+          .run();
+
+        // Enroll in active friend_add scenarios so step delivery works
+        for (const scenario of accountScenarios) {
+          try {
+            await enrollFriendInScenario(db, friend.id, scenario.id);
+          } catch { /* non-fatal: duplicate or missing scenario */ }
+        }
+
+        imported++;
+      }
+
+      results.push({
+        accountId: account.id,
+        accountName: account.name,
+        total: allUserIds.length,
+        imported,
+      });
+    }
+
+    return c.json({ success: true, data: results });
+  } catch (err) {
+    console.error('POST /api/friends/import-from-line error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });
 

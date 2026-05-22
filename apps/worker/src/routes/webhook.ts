@@ -448,10 +448,25 @@ async function handleEvent(
       event.source.type === 'user' ? event.source.userId : undefined;
     if (!userId) return;
 
-    const friend = await getFriendByLineUserId(db, userId);
-    if (!friend) return;
+    let friend = await getFriendByLineUserId(db, userId);
+    if (!friend) {
+      let profile;
+      try {
+        profile = await lineClient.getProfile(userId);
+      } catch { /* non-fatal */ }
+      friend = await upsertFriend(db, {
+        lineUserId: userId,
+        displayName: profile?.displayName ?? null,
+        pictureUrl: profile?.pictureUrl ?? null,
+        statusMessage: profile?.statusMessage ?? null,
+      });
+      if (lineAccountId) {
+        await db.prepare('UPDATE friends SET line_account_id = ?, updated_at = ? WHERE id = ?')
+          .bind(lineAccountId, jstNow(), friend.id).run();
+      }
+    }
 
-    const incomingText = textMessage.text;
+    const incomingText = textMessage.text.trim();
     const now = jstNow();
     const logId = crypto.randomUUID();
 

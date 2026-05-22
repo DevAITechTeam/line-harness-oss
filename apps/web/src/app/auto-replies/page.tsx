@@ -248,6 +248,7 @@ export default function AutoRepliesPage() {
         <EditDialog
           draft={editing}
           templates={templates}
+          accounts={accounts.map((a) => ({ id: a.id, name: a.name, displayName: a.displayName }))}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load() }}
         />
